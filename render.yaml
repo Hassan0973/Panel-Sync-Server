@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: panel-sync-test
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: TEAM_KEY
+        generateValue: true

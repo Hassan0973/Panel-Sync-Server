@@ -1,0 +1,8 @@
+{
+  "name": "panel-sync-render",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Temporary panel synchronization test server",
+  "scripts": {"start": "node server.js"},
+  "engines": {"node": ">=20"}
+}
