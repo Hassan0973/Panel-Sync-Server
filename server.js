@@ -1,11 +1,31 @@
 'use strict';
 const http = require('http');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const PORT = Number(process.env.PORT || 10000);
 const TEAM_KEY = process.env.TEAM_KEY;
 if (!TEAM_KEY) { console.error('Missing TEAM_KEY environment variable'); process.exit(1); }
 const panels = new Map();
 const MAX = 2000;
+const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'panels-data.json');
+function persist() {
+  try {
+    fs.mkdirSync(path.dirname(DATA_FILE), {recursive:true});
+    const temp = DATA_FILE + '.tmp';
+    fs.writeFileSync(temp, JSON.stringify([...panels.values()]));
+    fs.renameSync(temp, DATA_FILE);
+  } catch (e) { console.error('PERSIST FAILED:', e.message); }
+}
+try {
+  if (fs.existsSync(DATA_FILE)) {
+    const items = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    if (Array.isArray(items)) for (const p of items) {
+      if (p && typeof p.id === 'string' && panels.size < MAX) panels.set(p.id,p);
+    }
+  }
+} catch (e) { console.error('RESTORE FAILED:', e.message); }
+
 function reply(res, status, payload) {
   res.writeHead(status, {'content-type':'application/json; charset=utf-8', 'cache-control':'no-store'});
   res.end(JSON.stringify(payload));
@@ -42,7 +62,13 @@ function savePanel(p, res) {
   const record = {...existing, id, x:p.x, y:p.y, z:p.z, updatedAt:Date.now()};
   if (typeof p.finishAt === 'number' && Number.isFinite(p.finishAt)) record.finishAt = p.finishAt;
   if (typeof p.repairs === 'number' && Number.isInteger(p.repairs) && p.repairs >= 0) record.repairs = p.repairs;
+  // Preserve existing Execute ID when older clients omit it.
+  if (Object.prototype.hasOwnProperty.call(p, 'executeId')) {
+    if (!Number.isSafeInteger(p.executeId) || p.executeId < 0) return reply(res,400,{error:'invalid executeId'});
+    record.executeId = p.executeId;
+  }
   panels.set(id,record);
+  persist();
   return reply(res,200,{ok:true,panel:record});
 }
 const server = http.createServer(async(req,res) => {
@@ -61,7 +87,8 @@ const server = http.createServer(async(req,res) => {
     if (body.action === 'push') return savePanel(body.panel,res);
     if (body.action === 'remove') {
       if (typeof body.id !== 'string') return reply(res,400,{error:'missing id'});
-      return reply(res,200,{ok:true,removed:panels.delete(body.id)});
+      const removed = panels.delete(body.id); if (removed) persist();
+      return reply(res,200,{ok:true,removed});
     }
     return reply(res,400,{error:'unknown action'});
   }
@@ -74,13 +101,14 @@ const server = http.createServer(async(req,res) => {
     return savePanel(body && body.panel,res);
   }
   if (url.pathname === '/panels' && req.method === 'DELETE') {
-    panels.clear(); return reply(res,200,{ok:true,count:0});
+    panels.clear(); persist(); return reply(res,200,{ok:true,count:0});
   }
   if (url.pathname === '/panels/remove' && req.method === 'POST') {
     let body;
     try { body = await readJSON(req); } catch (e) { return reply(res,400,{error:'invalid JSON'}); }
     if (typeof body.id !== 'string') return reply(res,400,{error:'missing id'});
-    return reply(res,200,{ok:true,removed:panels.delete(body.id)});
+    const removed = panels.delete(body.id); if (removed) persist();
+    return reply(res,200,{ok:true,removed});
   }
   return reply(res,404,{error:'not found'});
 });
