@@ -1,8 +1,15 @@
 {
   "name": "panel-sync-render",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Temporary panel synchronization test server",
-  "scripts": {"start": "node server.js"},
-  "engines": {"node": ">=20"}
+  "description": "Two-client solar panel sync with optimistic revisions and PostgreSQL durability",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.13.3"
+  }
 }
